@@ -9,6 +9,12 @@ let conversationHistory = [];
 let isProcessing = false;
 
 marked.setOptions({
+    highlight: function(code, lang) {
+        if (lang && hljs.getLanguage(lang)) {
+            return hljs.highlight(code, { language: lang }).value;
+        }
+        return hljs.highlightAuto(code).value;
+    },
     breaks: true,
     gfm: true,
     headerIds: false,
@@ -17,6 +23,9 @@ marked.setOptions({
 
 async function queryAPI(data) {
     try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
+
         const response = await fetch(API_URL, {
             headers: {
                 Authorization: `Bearer ${API_KEY}`,
@@ -24,12 +33,22 @@ async function queryAPI(data) {
             },
             method: 'POST',
             body: JSON.stringify(data),
+            signal: controller.signal
         });
-        if (!response.ok) throw new Error(`Erro na requisição: ${response.status} ${response.statusText}`);
+
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+            throw new Error(`Erro na requisição: ${response.status} ${response.statusText}`);
+        }
+
         return await response.json();
     } catch (error) {
+        if (error.name === 'AbortError') {
+            throw new Error('A requisição excedeu o tempo limite.');
+        }
         console.error('Erro ao chamar a API:', error);
-        return { error: error.message };
+        throw error;
     }
 }
 
@@ -120,6 +139,10 @@ async function processBotResponse(typingIndicator) {
             botMessage = cleanResponse(botResponse[0].generated_text);
         }
 
+        botMessage = botMessage.replace(/```(\w+)?\n([\s\S]*?)```/g, (_, lang, code) => {
+            return `\n\`\`\`${lang || ''}\n${code.trim()}\n\`\`\`\n`;
+        });
+        
         botMessage = marked.parse(botMessage);
 
         conversationHistory.push({ role: 'assistant', content: botMessage });
