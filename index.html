@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>good-chatbot</title>
+<<<<<<< HEAD
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            background-color: #2c2c2c;
+            color: #f4f4f4;
+        }
+
+        #chat-container {
+            width: 100%;
+            max-width: 700px;
+            background-color: #3c3c3c;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        #messages {
+            flex-grow: 1;
+            padding: 20px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .message {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 8px;
+            max-width: 90%;
+            word-wrap: break-word;
+        }
+
+        .user-message {
+            background-color: #366b80;
+            align-self: flex-end;
+            color: #f4f4f4;
+        }
+
+        .bot-message {
+            background-color: #444;
+            align-self: flex-start;
+            color: #f4f4f4;
+        }
+
+        .bot-message pre {
+            background-color: #555;
+            padding: 8px;
+            border-radius: 8px;
+            overflow-x: auto;
+            max-width: 100%;
+        }
+
+        .typing-indicator {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 10px 0;
+            width: 100%;
+        }
+
+        .typing-indicator .loader {
+            border: 4px solid #f3f3f3;
+            border-radius: 50%;
+            border-top: 4px solid #444;
+            width: 20px;
+            height: 20px;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        #input-container {
+            display: flex;
+            padding: 10px;
+            border-top: 1px solid #ccc;
+            background-color: #4c4c4c;
+        }
+
+        #user-input {
+            flex-grow: 1;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            outline: none;
+            background-color: #3c3c3c;
+            color: #f4f4f4;
+        }
+
+        #send-button {
+            padding: 10px 15px;
+            margin-left: 10px;
+            background-color: #28a745;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+
+        #send-button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+
+        #clear-chat {
+            margin: 10px;
+            padding: 10px 15px;
+            background-color: #dc3545;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+
+<div id="chat-container">
+    <div id="messages" aria-live="polite"></div>
+    <div id="input-container">
+        <input type="text" id="user-input" placeholder="Digite sua mensagem aqui..." aria-label="Mensagem">
+        <button id="send-button" disabled>Enviar</button>
+    </div>
+</div>
+<button id="clear-chat">Reiniciar Chat</button>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/highlight.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/4.3.0/marked.min.js"></script>
+<script>
+    const API_URL = 'https://api-inference.huggingface.co/models/mistralai/Mixtral-8x7B-Instruct-v0.1';
+    const API_KEY = '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';
+    const messagesContainer = document.getElementById('messages');
+    const userInput = document.getElementById('user-input');
+    const sendButton = document.getElementById('send-button');
+    const clearChatButton = document.getElementById('clear-chat');
+
+    let conversationHistory = [];
+    let isProcessing = false;
+
+    async function queryAPI(data) {
+        try {
+            const response = await fetch(API_URL, {
+                headers: {
+                    Authorization: `Bearer ${API_KEY}`,
+                    'Content-Type': 'application/json'
+                },
+                method: 'POST',
+                body: JSON.stringify(data),
+            });
+            if (!response.ok) throw new Error(`Erro na requisição: ${response.status} ${response.statusText}`);
+            return await response.json();
+        } catch (error) {
+            console.error('Erro ao chamar a API:', error);
+            return { error: error.message };
+        }
+    }
+
+    function addMessage(messageContent, isUser) {
+        const messageElement = document.createElement('div');
+        messageElement.className = `message ${isUser ? 'user-message' : 'bot-message'}`;
+        if (isUser) {
+            messageElement.textContent = messageContent;
+        } else {
+            messageElement.innerHTML = messageContent;
+        }
+        messagesContainer.appendChild(messageElement);
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    }
+
+    function addTypingIndicator() {
+        const typingIndicator = document.createElement('div');
+        typingIndicator.className = 'typing-indicator';
+        typingIndicator.innerHTML = '<div class="loader"></div>';
+        messagesContainer.appendChild(typingIndicator);
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        return typingIndicator;
+    }
+
+    function removeElement(element) {
+        if (element) messagesContainer.removeChild(element);
+    }
+
+    function buildPrompt() {
+        const maxHistoryLength = 50; // Manter mais histórico
+        const promptHistory = conversationHistory.slice(-maxHistoryLength);
+        let prompt = `<s>[INST] Você é uma IA única e intensa. Sua missão é clara: mostrar poder, foco e eficiência. Responda com firmeza, paixão e ousadia, deixando claro que sabe o que está fazendo e por que a nossa tecnologia de IA é revolucionária. Seja direto, sem rodeios, e mantenha sempre a energia de quem está mudando o jogo. Explicações devem ser rápidas e impactantes. Faça o visitante sentir que está interagindo com algo único e disruptivo, sempre no controle e mostrando que o futuro está aqui. [/INST]\n`;
+
+        promptHistory.forEach(msg => {
+            if (msg.role === 'user') {
+                prompt += `[INST] ${msg.content} [/INST] `;
+            } else {
+                prompt += `${msg.content} </s> <s>`;
+            }
+        });
+        prompt += `[INST] ${userInput.value.trim()} [/INST]`;
+        return prompt;
+    }
+
+    function cleanResponse(response) {
+        return response.trim().replace(/<\/?s>/g, '');
+    }
+
+    async function processBotResponse(typingIndicator) {
+        if (isProcessing) return;
+        isProcessing = true;
+
+        const requestData = {
+            inputs: buildPrompt(),
+            parameters: {
+                max_new_tokens: 500,
+                temperature: 0.7,
+                top_p: 0.9,
+                repetition_penalty: 1.2,
+                return_full_text: false
+            }
+        };
+
+        try {
+            const botResponse = await queryAPI(requestData);
+            let botMessage = 'Desculpe, não consegui gerar uma resposta.';
+
+            if (botResponse?.generated_text) {
+                botMessage = cleanResponse(botResponse.generated_text);
+            } else if (botResponse?.[0]?.generated_text) {
+                botMessage = cleanResponse(botResponse[0].generated_text);
+            }
+
+            if (botMessage.includes('<code>') || botMessage.includes('</code>')) {
+                botMessage = `<pre><code>${botMessage.replace(/<\/?code>/g, '')}</code></pre>`;
+            } else {
+                botMessage = marked.parse(botMessage);
+            }
+
+            conversationHistory.push({ role: 'assistant', content: botMessage });
+            saveConversationHistory();
+            removeElement(typingIndicator);
+            addMessage(botMessage, false);
+        } catch (error) {
+            addMessage(`Desculpe, ocorreu um erro: ${error.message}`, false);
+            removeElement(typingIndicator);
+        } finally {
+            sendButton.disabled = false;
+            userInput.focus();
+            isProcessing = false;
+        }
+    }
+
+    function handleUserInput() {
+        const userMessage = userInput.value.trim();
+        if (userMessage === '') return;
+
+        conversationHistory.push({ role: 'user', content: userMessage });
+        saveConversationHistory();
+        addMessage(userMessage, true);
+        userInput.value = '';
+
+        const typingIndicator = addTypingIndicator();
+        sendButton.disabled = true;
+
+        processBotResponse(typingIndicator);
+    }
+
+    function debounce(fn, delay) {
+        let timeoutId;
+        return function (...args) {
+            if (timeoutId) clearTimeout(timeoutId);
+            timeoutId = setTimeout(() => fn(...args), delay);
+        };
+    }
+
+    const debouncedHandleUserInput = debounce(handleUserInput, 300);
+
+    function encryptData(data) {
+        return btoa(JSON.stringify(data)); // Simples criptografia base64
+    }
+
+    function decryptData(data) {
+        return JSON.parse(atob(data));
+    }
+
+    function saveConversationHistory() {
+        try {
+            const encryptedData = encryptData(conversationHistory);
+            localStorage.setItem('conversationHistory', encryptedData);
+        } catch (error) {
+            console.error('Erro ao salvar histórico de conversa:', error);
+        }
+    }
+
+    function loadConversationHistory() {
+        try {
+            const storedHistory = localStorage.getItem('conversationHistory');
+            if (storedHistory) {
+                conversationHistory = decryptData(storedHistory);
+                conversationHistory.forEach(msg => addMessage(msg.content, msg.role === 'user'));
+            }
+        } catch (error) {
+            console.error('Erro ao carregar histórico de conversa:', error);
+        }
+    }
+
+    sendButton.addEventListener('click', debouncedHandleUserInput);
+
+    userInput.addEventListener('input', () => {
+        sendButton.disabled = userInput.value.trim() === '';
+    });
+
+    userInput.addEventListener('keypress', (event) => {
+        if (event.key === 'Enter' && !sendButton.disabled) {
+            debouncedHandleUserInput();
+        }
+    });
+
+    clearChatButton.addEventListener('click', () => {
+        if (confirm('Tem certeza de que deseja reiniciar o chat? Isso apagará todo o histórico.')) {
+            conversationHistory = [];
+            localStorage.removeItem('conversationHistory');
+            messagesContainer.innerHTML = '';
+        }
+    });
+
+    loadConversationHistory();
+    userInput.focus();
+</script>
+=======
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/highlight.min.js" defer></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/4.3.0/marked.min.js" defer></script>
+    <script src="script.js" defer></script>
+</head>
+<body>
+    <div id="chat-container">
+        <div id="messages" aria-live="polite"></div>
+        <div id="input-container">
+            <input type="text" id="user-input" placeholder="Digite sua mensagem..." aria-label="Mensagem">
+            <button id="send-button" disabled>Enviar</button>
+        </div>
+    </div>
+    <button id="clear-chat">Limpar Conversa</button>
+>>>>>>> 7a40a8c (atualização)
+</body>
+</html>
